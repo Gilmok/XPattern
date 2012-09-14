@@ -1,0 +1,1 @@
+<class name="XPattern"><vars /><method name="replaceNode" rtnType="void"><param name="input" datatype="Node" /><param name="replacePattern" datatype="String" /></method><method name="dummy" /><desc>This class has no class</desc><sample><![CDATA[my sample is good]]></sample></class>
