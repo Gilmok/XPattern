@@ -10,7 +10,9 @@ import java.io.*;
 
 import javax.xml.*;
 import javax.xml.validation.*;
+import javax.xml.transform.*;
 import javax.xml.transform.dom.*;
+import javax.xml.transform.stream.StreamResult;
 import javax.xml.parsers.*;
 
 import java.util.*;
@@ -295,7 +297,35 @@ import java.lang.reflect.*;
     {
         public static void saveXML(Document data, String toFile)
         {
-            //data.Save(toFile);
+        	try
+        	{
+        		TransformerFactory factory = TransformerFactory.newInstance(); 
+        		Transformer transformer = factory.newTransformer(); 
+
+        		//transformer.setOutputProperty(OutputKeys.INDENT, "yes"); 
+        		//transformer.setOutputProperty(OutputKeys.METHOD,"xml"); 
+        		// transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "3"); 
+
+
+        		// create string from xml tree 
+        		StringWriter sw = new StringWriter(); 
+        		StreamResult result = new StreamResult(sw); 
+        		DOMSource source = new DOMSource(data); 
+        		transformer.transform(source, result); 
+
+        		String xmlString = sw.toString(); 
+
+
+        		File file = new File(toFile); 
+        		BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file))); 
+        		bw.write(xmlString); 
+        		bw.flush();
+        		bw.close();
+        	}
+        	catch(Exception ex)
+        	{
+        		ex.printStackTrace();
+        	}
         }
 
         public static Document loadXML(String fromFile)
@@ -316,6 +346,7 @@ import java.lang.reflect.*;
         	}
         	catch(Exception ex)
         	{
+        		ex.printStackTrace();
         		return null;
         	}
         	
@@ -3189,6 +3220,8 @@ public class XPatternTest
 	public static void main(String args[])
 	{
 		Document d = XmlUtils.loadXML("src\\XPattern1.xml");
+		XmlUtils.saveXML(d, "src\\XPattern1.xml");
+		d = XmlUtils.loadXML("src\\XPattern1.xml");
 		XPattern xp1 = new XPattern(d);
 		//FIND
 		//directional find
