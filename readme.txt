@@ -1,8 +1,13 @@
-XPattern 1.0
+XPattern 1.01
 ==================================
 XPattern is an alternative to XSLT and uses regular expression style syntax to find and replace elements, attributes, and text in XML documents.
 ==================================
 Verion notes:
+1.01: 
+- Fixed a problem in XTreeNode.isRegex() where move-up instructions were treated as regexes
+- Fixed a problem in XWalker.getParentIndex() where it assumed that the current node was always a child of the given parent (which could be false if you move up and back down the tree again)
+- Added in options to ignore whitespace text nodes and comment nodes
+- Fixed errors in readme
 1.0: Initial upload
 ==================================
 Quick Reference:
@@ -48,13 +53,19 @@ CDATA: insert CDATA section
 <: Go to the previous sibling
 ------------------------------
 $n: Insert the nth group, without preserving children
-$`n and $': Insert the text found before the nth group and after the nth group (text and regexes only)
+$`n and $'n: Insert the text found before the nth group and after the nth group (text and regexes only)
 &n: Insert the nth group, preserving children
 %n: Insert only the children of the nth group
 ^n: Move the insertion point to the nth group
 ------------------------------
 #n: Insert the nth paramaterized item
 
+|: The pipe character (|) is used internally; do not use the pipe character in either search or replace operations.
+
+
+NEW IN 1.01
+===================================
+You can now specify to ignore empty text nodes and comment nodes in your search via the XPattern.setOption() method.
 
 
 XPATTERN GUIDE
@@ -72,6 +83,8 @@ You can find elements that exist only on the specified xpath as well.  To specif
 Examples:
 "param\desc" finds all the desc elements underneath param elements
 "method\param>param" finds a param element next to a param element underneath a method element
+"method\param/>method" finds a method element with a param element underneath it and a method element next to that method
+Note: Note the use of />.  If you are moving up the tree, it is recommended that you specify a direction to travel immediately after you move up; failure to do so could reslut in an infinite loop
 
 Use a * to specify a wildcard find.
 "method\*" finds all the children of the method node
@@ -109,6 +122,7 @@ Example: "sample\!--" finds the comment node underneath the sample element
 
 To find a text node, use the quote mark (").  Put a * after the text node to specify that you want to match any text.
 Example: "sample\desc\"*" finds a text node underneath a desc element underneath a sample element
+Note: Always specify text to find in a text node, even if it is just *
 
 You can specify the text you wish to match.
 Example: "name\"replaceAll" finds the text node whose text is "replaceAll" underneath a name element
@@ -232,5 +246,3 @@ Example: "class\method\(var)", "^1variable" replaces var elements with variable 
 PARAMETERIZATION
 
 Like find opearations, use the # to insert a parameterized value.  These are treated as non-interpolated values.
-
-

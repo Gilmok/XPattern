@@ -737,6 +737,11 @@ import java.lang.reflect.*;
 
         int globalMatch = 1;
         boolean preserveRoot = false;
+        
+        int options = 0;
+        
+        public static final int IGNORE_COMMENTS = 1;
+        public static final int IGNORE_EMPTY_TEXT = 2;
 
         public XPattern(Document d)
         {
@@ -746,6 +751,11 @@ import java.lang.reflect.*;
         public XPattern(Node nde)
         {
             xd = nde;
+        }
+        
+        public void setOption(int input)
+        {
+        	options = options ^ input;
         }
 
         /*public void setPreserveRootChildren(bool val) //obsolete
@@ -918,6 +928,11 @@ import java.lang.reflect.*;
                         break;
                 }
             }
+            
+            if((this.options & IGNORE_COMMENTS) > 0)
+            	xw.setOption(IGNORE_COMMENTS);
+            if((this.options & IGNORE_EMPTY_TEXT) > 0)
+            	xw.setOption(IGNORE_EMPTY_TEXT);
             
             xw.start();
             if (xw.getEGroup() != null)
@@ -1807,7 +1822,13 @@ import java.lang.reflect.*;
 
         int debug = 0;
         int options = 0;
+        
+        //flags
+        boolean ignoreComments;
+        boolean ignoreEmptyText;
         //String debugText;// = "";
+        
+        
 
         public XWalker(Node x, ELinkedList<XTreeNode> l, String[] inParams)
         {
@@ -1819,7 +1840,19 @@ import java.lang.reflect.*;
             //currItem = lst.First;
             stop = false;
            // debugText = "";
-            
+            ignoreComments = false;
+            ignoreEmptyText = false;
+        }
+        
+        public void setOption(int input)
+        {
+        	switch(input)
+        	{
+        	case XPattern.IGNORE_COMMENTS:
+        		ignoreComments = true; break;
+        	case XPattern.IGNORE_EMPTY_TEXT:
+        		ignoreEmptyText = true; break;
+        	}
         }
 
         public XWalker(Document x, ELinkedList<XTreeNode> l, int lastMatch, String[] ip)
@@ -1889,7 +1922,11 @@ import java.lang.reflect.*;
         {
         	Node child = childNode;
         	while(child.getParentNode() != parentNode)
+        	{
         		child = child.getParentNode();
+        		if(child == null)
+        			return Integer.MAX_VALUE - 1;
+        	}
         	int len = parentNode.getChildNodes().getLength();
         	if(stop)
         		return len;
@@ -1909,12 +1946,59 @@ import java.lang.reflect.*;
         	}
         	System.out.println("=================================");
         }
+        
+        private char getLastDirection(int input)
+        {
+        	for(int i = input; i >= 0; i--)
+        	{
+        		String dir = tokenList.get(i).getToken();
+        		if(dir.equals(">") || dir.equals("<") || dir.equals("\\"))
+        			return dir.charAt(0);
+        	}
+        	return '0';
+        }
 
         /*REFACTOR NOTES: Store the XmlNodes you find in the corresponding XTreeNode so that you don't need to match them up later;
          the XTreeNode already stores the list of groups the node needs to belong to so just storing it with the XTreeNode would
          be a better idea than the unwind later*/
         private void walk(int findMe, ELinkedList<Node>[] inPath/*, Node refNode*/)  //refNode will be null if you are doing a normal find pass, 
         {
+        	if(findMe < tokenList.size())
+        	{
+        		boolean ignoreMe = false;
+        		if(currTree.getNodeType() == Node.COMMENT_NODE && ignoreComments)
+        			ignoreMe = true;
+        		if(currTree.getNodeType() == Node.TEXT_NODE && ignoreEmptyText)
+        		{
+        			String value = currTree.getTextContent();
+        			if(value.trim().length() == 0)
+        				ignoreMe = true;
+        		}
+        		if(ignoreMe)
+        		{
+        			char ld = getLastDirection(findMe);
+        			switch(ld)
+        			{
+        			case '<':
+        				if(currTree.getPreviousSibling() != null)
+        				{
+        					setCurrentTree(currTree.getPreviousSibling());
+        					walk(findMe, inPath);
+        				}
+        				return;
+        			case '>':
+        				if(currTree.getNextSibling() != null)
+        				{
+        					setCurrentTree(currTree.getNextSibling());
+        					walk(findMe, inPath);
+        				}
+        				return;
+        			default:
+        				return;
+        			}
+        		}
+        	}
+        	
         	int nTokens = inPath.length;
         	//if(findMe == 0)  //because I'm lazy
         		//resetMatch();
@@ -2001,7 +2085,9 @@ import java.lang.reflect.*;
                         setCurrentTree(allChildren.item(i));
                         walk(findMe + 1, path);
                         //find where currentNode is
-                        i = getParentIndex(parentTree, currTree);
+                        int loc = getParentIndex(parentTree, currTree);
+                        if(loc < allChildren.getLength())
+                        	i = loc;
                         //while(allChildren.item(i) != currTree)
                         	//i++;
                         if(nextWithout && tokenList.get(findMe).getEmptyOK() == false)
@@ -2804,7 +2890,7 @@ import java.lang.reflect.*;
 
         public boolean isRegex()
         {
-            if (token.startsWith("/"))
+            if (token.startsWith("/") && token.length() > 1)
                 return true;
             if (token.startsWith("@") && token.contains("=/"))
                 return true;
