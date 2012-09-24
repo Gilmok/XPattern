@@ -757,13 +757,18 @@ import java.lang.reflect.*;
         
         public void setOption(int input)
         {
-        	options = options ^ input;
+        	options = options | input;
+        }
+        
+        public void clearOptions()
+        {
+        	options = 0;
         }
         
         private String setupOptions(String input, boolean ignoreGlobal)
         {
         	String options = "";
-        	this.options = 0;
+        	//this.options = 0;
             String pattern = input;
             if (input.contains("|"))
             {
