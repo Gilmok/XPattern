@@ -742,6 +742,8 @@ import java.lang.reflect.*;
         
         public static final int IGNORE_COMMENTS = 1;
         public static final int IGNORE_EMPTY_TEXT = 2;
+        public static final int GLOBAL_SEARCH = 4;
+        public static final int IGNORE_CASE = 8;
 
         public XPattern(Document d)
         {
@@ -757,6 +759,32 @@ import java.lang.reflect.*;
         {
         	options = options ^ input;
         }
+        
+        private String setupOptions(String input, boolean ignoreGlobal)
+        {
+        	String options = "";
+        	this.options = 0;
+            String pattern = input;
+            if (input.contains("|"))
+            {
+                String[] allIn = input.split("\\|");
+                pattern = allIn[0];
+                options = allIn[1];
+            }
+            
+            for(char c : options.toCharArray())
+            {
+            	switch(c)
+            	{
+            	case 'g': if(!ignoreGlobal) setOption(XPattern.GLOBAL_SEARCH);  break;
+            	case 'i': setOption(XPattern.IGNORE_CASE); break;
+            	case 'c': setOption(XPattern.IGNORE_COMMENTS); break;
+            	case 't': setOption(XPattern.IGNORE_EMPTY_TEXT); break;
+            	}
+            }
+            
+            return pattern;
+        }
 
         /*public void setPreserveRootChildren(bool val) //obsolete
         {
@@ -771,7 +799,8 @@ import java.lang.reflect.*;
         public NodeGroup findFirst(String pattern, String[] ps)
         {
             globalMatch = 1;
-            return XTree(xd, pattern, ps);
+            ELinkedList<XTreeNode> lst = tokenizeFind(pattern, true);
+            return XTree(xd, lst, ps);
         }
 
         public NodeGroup[] findAll(String input)
@@ -796,9 +825,11 @@ import java.lang.reflect.*;
             else
                 input += "|g";
 
+            ELinkedList<XTreeNode> lst = tokenizeFind(input, false);
+            
             while (true)
             {
-                NodeGroup eg = XTree(xd, input, ps);
+                NodeGroup eg = XTree(xd, lst, ps);
                 if (eg == null)
                     break;
                 else
@@ -809,18 +840,10 @@ import java.lang.reflect.*;
         }
 
         /*REFACTOR NOTES: make sure that the pattern isn't tokenized each time this method is called */
-        private NodeGroup XTree(Node doc, String input, String[] paramStrings)
+        private ELinkedList<XTreeNode> tokenizeFind(String input, boolean ignoreGlobal)
         {
-            String options = "";
-            String pattern = input;
-            if (input.contains("|"))
-            {
-                String[] allIn = input.split("\\|");
-                pattern = allIn[0];
-                options = allIn[1];
-            }
-
-            ELinkedList<XTreeNode> lst = new ELinkedList<XTreeNode>();
+        	String pattern = setupOptions(input, ignoreGlobal);
+        	ELinkedList<XTreeNode> lst = new ELinkedList<XTreeNode>();
             String currToken = "";
             int max = 1;
             ELinkedList<Integer> groupNo = new ELinkedList<Integer>();
@@ -905,9 +928,15 @@ import java.lang.reflect.*;
             }
             if (currToken != "")
                 lst.addLast(new XTreeNode(currToken, groupNo));
+            return lst;
+        }
+        
+        private NodeGroup XTree(Node doc, ELinkedList<XTreeNode> inList, String[] paramStrings)
+        {
             
-            XWalker xw = new XWalker(doc, lst, paramStrings);
-            String offOptions = "gi";
+            
+            XWalker xw = new XWalker(doc, inList, paramStrings);
+            /*String offOptions = "gi";
             for (char c : options.toCharArray())
             {
                 switch (c)
@@ -927,8 +956,13 @@ import java.lang.reflect.*;
                         globalMatch = 1;
                         break;
                 }
-            }
-            
+            }*/
+            if((this.options & GLOBAL_SEARCH) > 0)
+            	xw.setLastMatch(globalMatch);
+            else
+            	globalMatch = 1;
+            if((this.options & IGNORE_CASE) > 0)
+            	xw.setOption(IGNORE_CASE);
             if((this.options & IGNORE_COMMENTS) > 0)
             	xw.setOption(IGNORE_COMMENTS);
             if((this.options & IGNORE_EMPTY_TEXT) > 0)
@@ -956,7 +990,7 @@ import java.lang.reflect.*;
         {
             NodeGroup eg = findFirst(findPattern);
             if(eg != null)
-                XReplace(eg, replacePattern, paramList);
+                XReplace(eg, tokenizeReplace(replacePattern), paramList);
             return eg;
         }
 
@@ -1006,13 +1040,17 @@ import java.lang.reflect.*;
             //NodeGroup[] ngs = findAll(findPattern);
             //do replace on the deepest nodes first so that replacements aren't being made on subnodes of already removed nodes
             //ngs = sortNodes(ngs);
+            
+            ELinkedList<XTreeNode> findList = tokenizeFind(findPattern, false);
+            Vector<XTreeNode> replaceList = tokenizeReplace(replacePattern);
 
             while (true)
             {
-                NodeGroup eg = XTree(xd, findPattern, paramList);
+                NodeGroup eg = XTree(xd, findList, paramList);
                 if (eg == null)
                     break;
-                XReplace(eg, replacePattern, paramList);
+                XReplace(eg, replaceList, paramList);
+                //System.out.println(XmlUtils.outerXml(xd));
                 ngs.addLast(eg);
             }
             int n = ngs.size();
@@ -1028,7 +1066,8 @@ import java.lang.reflect.*;
         private Node XReplace(Node branch, String pattern, String[] paramList)
         {
             NodeGroup ng = new NodeGroup(branch);
-            return XReplace(ng, pattern, paramList);
+            
+            return XReplace(ng, tokenizeReplace(pattern), paramList);
         }
 
         class XmlNodeEntry
@@ -1113,71 +1152,12 @@ import java.lang.reflect.*;
             rtnObj[1] = selNode;
             return rtnObj;
         }
-
-        /*REFACTOR NOTES: Make sure the replacement pattern isn't tokenized each time */
-        private Node XReplace(NodeGroup g, String pattern, String[] paramList)
+        
+        private Vector<XTreeNode> tokenizeReplace(String pattern)
         {
-            Node branch = g.get()[0];
-            Document xd = branch.getOwnerDocument();
-            Vector<XTreeNode> lst = new Vector<XTreeNode>();
-            String currToken = "";
-
-            //store off the indeces of all captured nodes, as well as ancestry
-            Hashtable<Node, Vector<Node>> clonedParents = new Hashtable<Node, Vector<Node>>();
-            Hashtable<Node, Vector<Integer>> insertionPoints = new Hashtable<Node, Vector<Integer>>();
-            Hashtable<Node, Vector<Integer>> oldAncestry = new Hashtable<Node, Vector<Integer>>();
-            Hashtable<Node, Vector<XmlNodeEntry>> insertionNodes = new Hashtable<Node, Vector<XmlNodeEntry>>();
-            //int yy = g.getGroupCount();
-            //if (yy > 1)
-                //Console.WriteLine("");
-            for (int i = 0; i < g.getGroupCount(); i++)
-            {
-                Node child = g.get(i + 1)[0];  //this could be a problem; review the code to see why this is necessary
-                if (child.getNodeType() == Node.ATTRIBUTE_NODE)
-                    continue;
-                Node parent = child.getParentNode();
-                int idx = 0;
-                NodeList nl1 = parent.getChildNodes();
-                for (int j = 0; j < nl1.getLength(); j++)
-                {
-                	Node ch = nl1.item(j);
-                    if (ch == child)
-                        break;
-                    idx++;
-                }
-                if (!clonedParents.containsKey(parent))
-                {
-                    clonedParents.put(parent, new Vector<Node>());
-                    insertionPoints.put(parent, new Vector<Integer>());
-                    oldAncestry.put(parent, new Vector<Integer>());
-                }
-                else
-                    System.out.println("");
-                insertionPoints.get(parent).add(idx);
-                oldAncestry.get(parent).add(i + 1);
-            }
-
-            //int insertionPoint = 0;
-            /*NodeList nl2 = branch.getParentNode().getChildNodes();  //this loop does nothing
-            for (int j = 0; j < nl2.getLength(); j++)
-            {
-            	Node ch = nl2.item(j);
-                if (ch == branch)
-                    break;
-                //insertionPoint++;
-            }*/
-
-           
-            //XmlNode subCursor = src;
-            Node newNode = null;
-            Node refNode = null;
-            Node topNode = null;
-
-            
-
-            char replaceDir = '0';
-
-            for (int i = 0; i < pattern.length(); i++)
+        	Vector<XTreeNode> lst = new Vector<XTreeNode>();
+        	String currToken = "";
+        	for (int i = 0; i < pattern.length(); i++)
             {
                 char c = pattern.charAt(i);
 
@@ -1265,9 +1245,77 @@ import java.lang.reflect.*;
 
             if (currToken != "")
                 lst.add(new XTreeNode(currToken, null));
+            
+            return lst;
+        }
+
+        /*REFACTOR NOTES: Make sure the replacement pattern isn't tokenized each time */
+        private Node XReplace(NodeGroup g, Vector<XTreeNode> lst, String[] paramList)
+        {
+            Node branch = g.get()[0];
+            Document xd = branch.getOwnerDocument();
+            //Vector<XTreeNode> lst = new Vector<XTreeNode>();
+            //String currToken = "";
+
+            //store off the indeces of all captured nodes, as well as ancestry
+            Hashtable<Node, Vector<Node>> clonedParents = new Hashtable<Node, Vector<Node>>();
+            Hashtable<Node, Vector<Integer>> insertionPoints = new Hashtable<Node, Vector<Integer>>();
+            Hashtable<Node, Vector<Integer>> oldAncestry = new Hashtable<Node, Vector<Integer>>();
+            Hashtable<Node, Vector<XmlNodeEntry>> insertionNodes = new Hashtable<Node, Vector<XmlNodeEntry>>();
+            //int yy = g.getGroupCount();
+            //if (yy > 1)
+                //Console.WriteLine("");
+            for (int i = 0; i < g.getGroupCount(); i++)
+            {
+                Node child = g.get(i + 1)[0];  //this could be a problem; review the code to see why this is necessary
+                if (child.getNodeType() == Node.ATTRIBUTE_NODE)
+                    continue;
+                Node parent = child.getParentNode();
+                int idx = 0;
+                NodeList nl1 = parent.getChildNodes();
+                for (int j = 0; j < nl1.getLength(); j++)
+                {
+                	Node ch = nl1.item(j);
+                    if (ch == child)
+                        break;
+                    idx++;
+                }
+                if (!clonedParents.containsKey(parent))
+                {
+                    clonedParents.put(parent, new Vector<Node>());
+                    insertionPoints.put(parent, new Vector<Integer>());
+                    oldAncestry.put(parent, new Vector<Integer>());
+                }
+                else
+                    System.out.println("");
+                insertionPoints.get(parent).add(idx);
+                oldAncestry.get(parent).add(i + 1);
+            }
+
+            //int insertionPoint = 0;
+            /*NodeList nl2 = branch.getParentNode().getChildNodes();  //this loop does nothing
+            for (int j = 0; j < nl2.getLength(); j++)
+            {
+            	Node ch = nl2.item(j);
+                if (ch == branch)
+                    break;
+                //insertionPoint++;
+            }*/
+
+           
+            //XmlNode subCursor = src;
+            Node newNode = null;
+            Node refNode = null;
+            Node topNode = null;
 
             
 
+            char replaceDir = '0';
+
+            
+
+            
+            int tokenNo = 0;
             //if the first one is a ^, move the insertion point to the specified node
             if (lst.size() > 0 && lst.get(0).getToken().startsWith("^"))
             {
@@ -1275,7 +1323,8 @@ import java.lang.reflect.*;
                 tok = tok.substring(1);
                 int groupNo = Integer.parseInt(tok);
                 branch = g.get(groupNo)[0];
-                lst.remove(0);
+                //lst.remove(0); do NOT do this
+                tokenNo++;
             }
 
             //now remove all the nodes after the branch
@@ -1297,7 +1346,7 @@ import java.lang.reflect.*;
             }
 
             //process the replacement tokens
-            for (int tokenNo = 0; tokenNo < lst.size(); tokenNo++)
+            for (; tokenNo < lst.size(); tokenNo++)
             {
             	XTreeNode token = lst.get(tokenNo);
                 String str = token.getToken();
@@ -1826,6 +1875,7 @@ import java.lang.reflect.*;
         //flags
         boolean ignoreComments;
         boolean ignoreEmptyText;
+        boolean ignoreCase;
         //String debugText;// = "";
         
         
@@ -1842,6 +1892,7 @@ import java.lang.reflect.*;
            // debugText = "";
             ignoreComments = false;
             ignoreEmptyText = false;
+            ignoreCase = false;
         }
         
         public void setOption(int input)
@@ -1852,6 +1903,8 @@ import java.lang.reflect.*;
         		ignoreComments = true; break;
         	case XPattern.IGNORE_EMPTY_TEXT:
         		ignoreEmptyText = true; break;
+        	case XPattern.IGNORE_CASE:
+        		ignoreCase = true; break;
         	}
         }
 
