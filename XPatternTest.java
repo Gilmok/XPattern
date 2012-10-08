@@ -805,7 +805,7 @@ import java.lang.reflect.*;
         {
             globalMatch = 1;
             ELinkedList<XTreeNode> lst = tokenizeFind(pattern, true);
-            return XTree(xd, lst, ps);
+            return XTree(xd, lst, ps).get(0);
         }
 
         public NodeGroup[] findAll(String input)
@@ -816,32 +816,34 @@ import java.lang.reflect.*;
         public NodeGroup[] findAll(String input, String[] ps)
         {
             globalMatch = 1;
-            ELinkedList<NodeGroup> elist = new ELinkedList<NodeGroup>();
+            //ELinkedList<NodeGroup> elist = new ELinkedList<NodeGroup>();
             String options = "";
-            String pattern = input;
+            //String pattern = input;
             if (input.contains("|"))
             {
                 String[] allIn = input.split("|");
-                pattern = allIn[0];
+                //pattern = allIn[0];
                 options = allIn[1];
                 if (!options.contains("g"))
-                    options += "g";
+                    input += "g";
             }
             else
                 input += "|g";
 
             ELinkedList<XTreeNode> lst = tokenizeFind(input, false);
             
-            while (true)
+            /*while (true)
             {
-                NodeGroup eg = XTree(xd, lst, ps);
-                if (eg == null)
+                Vector<NodeGroup> eg = XTree(xd, lst, ps);
+                if (eg.size() == 0)
                     break;
                 else
                     elist.addLast(eg);
-            }
+            }*/
+            Vector<NodeGroup> eg = XTree(xd, lst, ps);
+            
             NodeGroup ngs[] = new NodeGroup[0];
-            return elist.toArray(ngs);
+            return eg.toArray(ngs);
         }
 
         /*REFACTOR NOTES: make sure that the pattern isn't tokenized each time this method is called */
@@ -935,8 +937,8 @@ import java.lang.reflect.*;
                 lst.addLast(new XTreeNode(currToken, groupNo));
             return lst;
         }
-        
-        private NodeGroup XTree(Node doc, ELinkedList<XTreeNode> inList, String[] paramStrings)
+        //this needs to return a list of NodeGroups not just one
+        private Vector<NodeGroup> XTree(Node doc, ELinkedList<XTreeNode> inList, String[] paramStrings)
         {
             
             
@@ -963,7 +965,9 @@ import java.lang.reflect.*;
                 }
             }*/
             if((this.options & GLOBAL_SEARCH) > 0)
-            	xw.setLastMatch(globalMatch);
+            	//xw.setLastMatch(globalMatch);
+            	//isGlobal = true;
+            	xw.setOption(GLOBAL_SEARCH);
             else
             	globalMatch = 1;
             if((this.options & IGNORE_CASE) > 0)
@@ -1049,15 +1053,19 @@ import java.lang.reflect.*;
             ELinkedList<XTreeNode> findList = tokenizeFind(findPattern, false);
             Vector<XTreeNode> replaceList = tokenizeReplace(replacePattern);
 
-            while (true)
-            {
-                NodeGroup eg = XTree(xd, findList, paramList);
-                if (eg == null)
-                    break;
-                XReplace(eg, replaceList, paramList);
+            //while (true)
+            //{
+                Vector<NodeGroup> eg = XTree(xd, findList, paramList);
+                if (eg.size() == 0)
+                    return new NodeGroup[0];
+                for(int i = 0; i < eg.size(); i++)
+                {
+                	NodeGroup eg2 = eg.get(i);
+                	XReplace(eg2, replaceList, paramList);
+                }
                 //System.out.println(XmlUtils.outerXml(xd));
-                ngs.addLast(eg);
-            }
+                ngs.addAll(eg);
+            //}
             int n = ngs.size();
             NodeGroup[] arr = new NodeGroup[0];
             return ngs.toArray(arr);
@@ -1869,7 +1877,8 @@ import java.lang.reflect.*;
         //LinkedListNode<XTreeNode> currItem;
 
         boolean stop = false;
-        NodeGroup eg = null;
+        NodeGroup eg = null;  //needs to be a list
+        Vector<NodeGroup> egList = null;
 
         int matchNo = 0;
         int lastMatch = 1;
@@ -1877,13 +1886,13 @@ import java.lang.reflect.*;
         int debug = 0;
         int options = 0;
         
-        //flags
+        //flags 
         boolean ignoreComments;
         boolean ignoreEmptyText;
         boolean ignoreCase;
+        boolean isGlobal;
+        
         //String debugText;// = "";
-        
-        
 
         public XWalker(Node x, ELinkedList<XTreeNode> l, String[] inParams)
         {
@@ -1898,12 +1907,15 @@ import java.lang.reflect.*;
             ignoreComments = false;
             ignoreEmptyText = false;
             ignoreCase = false;
+            egList = new Vector<NodeGroup>();
         }
         
         public void setOption(int input)
         {
         	switch(input)
         	{
+        	case XPattern.GLOBAL_SEARCH:
+        		isGlobal = true; break;
         	case XPattern.IGNORE_COMMENTS:
         		ignoreComments = true; break;
         	case XPattern.IGNORE_EMPTY_TEXT:
@@ -2021,6 +2033,10 @@ import java.lang.reflect.*;
          be a better idea than the unwind later*/
         private void walk(int findMe, ELinkedList<Node>[] inPath/*, Node refNode*/)  //refNode will be null if you are doing a normal find pass, 
         {
+        	if(stop == true)
+            {
+                return;
+            }
         	if(findMe < tokenList.size())
         	{
         		boolean ignoreMe = false;
@@ -2076,11 +2092,7 @@ import java.lang.reflect.*;
             	for(int i = 0; i < nTokens; i++)
             		path[i] = new ELinkedList<Node>();
             }
-            if(stop == true)
-            {
-                
-                return;
-            }
+            
             //String findAttrib = null;
             //if(findMe >= tokenList.size())
             	//printTokenList();
@@ -2089,15 +2101,20 @@ import java.lang.reflect.*;
                // if (debug >= 1)
                    // debugText += ", done";
                 matchNo++;
-                if (lastMatch == matchNo)
+                egList.add(new NodeGroup(this, path));
+                if(!isGlobal)
+                {
+                	stop = true;
+                }
+                /*if (lastMatch == matchNo)  //if global then store off the NodeGroup instead of exiting the f(x)
                 {
                     //Node last = path.getLast();
                     /*if (currTree != last)        //note: this statement allows for ending a find operation with a direction
-                        path.AddLast(currTree); */ //I may remove it if I find the last node to be one too many (Removed - the * is there for a reason)
+                        path.AddLast(currTree);  //I may remove it if I find the last node to be one too many (Removed - the * is there for a reason)
                     eg = new NodeGroup(this, path);
                     stop = true;
                     lastMatch++;
-                }
+                }*/
                 else if(currTree.hasChildNodes())
                 {
                     Node parentTree = currTree;
@@ -2858,9 +2875,9 @@ import java.lang.reflect.*;
            
         }
 
-        public NodeGroup getEGroup()
+        public Vector<NodeGroup> getEGroup()
         {
-            return eg;
+            return egList;
         }
 
         public Node[][] getRegexParts(String input, String pattern, int matchNo)
