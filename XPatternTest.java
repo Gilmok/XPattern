@@ -1026,6 +1026,30 @@ import java.lang.reflect.*;
             }
             return list;
         }*/
+        
+        private Vector<NodeGroup> sortByDepth(Vector<NodeGroup> in)
+        {
+        	Vector<NodeGroup> rtnVal = new Vector<NodeGroup>();
+        	int maxDepth = 0;
+        	int insertMe = 0;
+        	while(in.size() > 0)
+        	{
+        		maxDepth = 0;
+        		insertMe = 0; 
+        		for(int j = 0; j < in.size(); j++)
+        		{
+        			NodeGroup ng = in.get(j);
+        			if(ng.depth > maxDepth)
+        			{
+        				insertMe = j;
+        				maxDepth = ng.depth;
+        			}
+        		}
+        		NodeGroup gp = in.remove(insertMe);
+            	rtnVal.add(gp);
+        	}
+        	return rtnVal;
+        }
 
         public NodeGroup[] replaceAll(String findPattern, String replacePattern, String[] paramList)
         {
@@ -1047,7 +1071,7 @@ import java.lang.reflect.*;
                 findPattern += "|g";*/  
 
             //NodeGroup[] ngs = findAll(findPattern);
-            //do replace on the deepest nodes first so that replacements aren't being made on subnodes of already removed nodes
+            
             //ngs = sortNodes(ngs);
             
             ELinkedList<XTreeNode> findList = tokenizeFind(findPattern, false);
@@ -1058,13 +1082,16 @@ import java.lang.reflect.*;
                 Vector<NodeGroup> eg = XTree(xd, findList, paramList);
                 if (eg.size() == 0)
                     return new NodeGroup[0];
-                for(int i = 0; i < eg.size(); i++)
+              //do replace on the deepest nodes first so that replacements aren't being made on subnodes of already removed nodes
+                Vector<NodeGroup> egSort = sortByDepth(eg);
+                for(int i = 0; i < egSort.size(); i++)
                 {
-                	NodeGroup eg2 = eg.get(i);
+                	NodeGroup eg2 = egSort.get(i);
+                	
                 	XReplace(eg2, replaceList, paramList);
                 }
                 //System.out.println(XmlUtils.outerXml(xd));
-                ngs.addAll(eg);
+                ngs.addAll(egSort);
             //}
             int n = ngs.size();
             NodeGroup[] arr = new NodeGroup[0];
@@ -3166,8 +3193,8 @@ import java.lang.reflect.*;
             {
                 groups[j] = item;
                 j++;
-            }
-            depth = calcDepth(match[0]);*/
+            }*/
+            depth = calcDepth(match[0]);
         }
         
         
@@ -3473,6 +3500,17 @@ public class XPatternTest
 		String[] replacers = {"aa", "bbb"};
 		xp1.replaceAll("class\\(desc)\\\"(*)", "^1desc@#0=#1$2", replacers);  //look at how the nodeGroup is made for this one
 		System.out.println(XmlUtils.outerXml(d.getDocumentElement()));
+		
+		
+		//XPattern2 tests
+		Document d2 = XmlUtils.loadXML("src\\XPattern2.xml");
+		XPattern xp2 = new XPattern(d2);
+		xp2.setOption(XPattern.IGNORE_EMPTY_TEXT);
+		ng1 = xp2.findAll("li");
+		expect(7, ng1);
+		
+		ng1 = xp2.replaceAll("(li)", "listItem%1");
+		System.out.println(XmlUtils.outerXml(d2.getDocumentElement()));
 		
 	}
 	

@@ -1,0 +1,6 @@
+<list>
+<li>Stuff</li>
+<li>More stuff</li>
+<li><list><li>stuff1</li><li>stuff2</li><li>stuff3</li></list></li>
+<li>peach</li>
+</list>
