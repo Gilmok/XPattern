@@ -62,6 +62,13 @@ $`n and $'n: Insert the text found before the nth group and after the nth group 
 
 |: The pipe character (|) is used internally; do not use the pipe character in either search or replace operations.
 
+OPTIONS
+=================================
+IGNORE_COMMENTS: comment nodes are ignored in searches
+IGNORE_EMPTY_TEXT: Ignore empty text nodes in searches
+GLOBAL_SEARCH: Search the document globally (automatically set in findAll and replaceAll operations)
+IGNORE_CASE: Case insensitive search on text
+
 
 NEW IN 1.01
 ===================================
@@ -71,7 +78,7 @@ You can now specify to ignore empty text nodes and comment nodes in your search 
 XPATTERN GUIDE
 ===================================
 XPattern is used to find and replace elements and attributes in XML documents.
-To use XPattern, simply make an XPattern object with the Xml node or document you wish to perform find and/or replacement operations on.  See the code in XPatternTest to see how this is done.
+To use XPattern, simply make an XPattern object with the Xml node or document you wish to perform find and/or replacement operations on.  See the code in XPatternTest.java to see how this is done.
 ===================================
 
 FINDING ELEMENTS
@@ -205,9 +212,9 @@ Example: "desc", "desc\"Description here" inserts a text node stating "descripti
 
 WORKING WITH GROUPS
 
-XPattern supports several operations when working with groups captured in a find operation.  How XPattern treats the group depends on the contents of the group:
-Group contains elements or attributes: group treated as nodes
-Group contains text: group treated as a value
+XPattern supports several operations when working with groups captured in a find operation.  How XPattern treats the group depends on the contents of the group.
+If a group contains elements or attributes, then the group is treated as nodes.
+If the group contains text, then the group is treated as a value.
 
 $n: Copy the nth group
 $n copies the contents of the nth group.  If the group is a group of nodes, no children of those nodes are copied.
@@ -232,8 +239,8 @@ Like $n, if multiple groups are captured, they are placed consecutively on the s
 
 %n: Copy the nth group's children
 %n copies only the children of the nodes found in the nth group.  It is undefined for values.
-This is a useful operation for renaming nodes.
-Example: "(var)(@**)" "variable@$2%1" renames each var element to a variable element while preserving the attributes and children of each old var element.
+This is a useful operation for renaming nodes.  This operation does not copy attributes.
+Example: "(var)(@**)" "variable@$2%1" renames each var element to a variable element while preserving the attributes and children of each old var element.  (Note that the attributes were captured and copied separately)
 
 This operation is only defined for the first node; it is not defined for groups containing more than one node.
 

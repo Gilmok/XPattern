@@ -770,6 +770,8 @@ import java.lang.reflect.*;
         	String options = "";
         	//this.options = 0;
             String pattern = input;
+            if(ignoreGlobal)
+            	this.options = this.options & (Integer.MAX_VALUE - GLOBAL_SEARCH);
             if (input.contains("|"))
             {
                 String[] allIn = input.split("\\|");
@@ -804,7 +806,7 @@ import java.lang.reflect.*;
         public NodeGroup findFirst(String pattern, String[] ps)
         {
             globalMatch = 1;
-            ELinkedList<XTreeNode> lst = tokenizeFind(pattern, true);
+            ELinkedList<XTreeNode> lst = tokenizeFind(pattern, true, ps);
             return XTree(xd, lst, ps).get(0);
         }
 
@@ -830,7 +832,7 @@ import java.lang.reflect.*;
             else
                 input += "|g";
 
-            ELinkedList<XTreeNode> lst = tokenizeFind(input, false);
+            ELinkedList<XTreeNode> lst = tokenizeFind(input, false, ps);
             
             /*while (true)
             {
@@ -847,13 +849,14 @@ import java.lang.reflect.*;
         }
 
         /*REFACTOR NOTES: make sure that the pattern isn't tokenized each time this method is called */
-        private ELinkedList<XTreeNode> tokenizeFind(String input, boolean ignoreGlobal)
+        private ELinkedList<XTreeNode> tokenizeFind(String input, boolean ignoreGlobal, String[] paramList)
         {
         	String pattern = setupOptions(input, ignoreGlobal);
         	ELinkedList<XTreeNode> lst = new ELinkedList<XTreeNode>();
             String currToken = "";
             int max = 1;
             ELinkedList<Integer> groupNo = new ELinkedList<Integer>();
+            //ELinkedList<Integer> paramNo = new ELinkedList<Integer>();
 
             for (int i = 0; i < pattern.length(); i++)
             {
@@ -892,27 +895,31 @@ import java.lang.reflect.*;
                         lst.addLast(new XTreeNode(String.valueOf(c), groupNo));
                         currToken = "";
                         break;
-                    case '#':
-                    	if (currToken != "")
-                            lst.addLast(new XTreeNode(currToken, groupNo));
+                    /*case '#': //you cannot do this now as quantifiers (*,+,?) are processed in the walk function
+                    	//currToken += '#';
+                    	//if (currToken != "")
+                            //lst.addLast(new XTreeNode(currToken, groupNo));
                         //lst.addLast(new XTreeNode(String.valueOf(c), groupNo));
-                    	while(true)
+                    	//int j = i;
+                    	String temp = "";
+                    	while(true)  //gather the number
                     	{
                     		i++;
                     		if(i == pattern.length())
                     			break;
                     		char ch = pattern.charAt(i);
                     		if(Character.isDigit(ch))
-                    			currToken += ch;
+                    			temp += ch;
                     		else
                     		{
-                    			lst.addLast(new XTreeNode(currToken, groupNo));
+                    			//lst.addLast(new XTreeNode(currToken, groupNo));
                     			i--;
                     			break;
                     		}
                     	}
-                        currToken = "";
-                        break;
+                    	int useParam = Integer.parseInt(temp);
+                        currToken += paramList[useParam];
+                        break;*/
                     case '(':
                         groupNo.add(max);
                         max++;
@@ -1055,26 +1062,26 @@ import java.lang.reflect.*;
         {
             globalMatch = 1;
             ELinkedList<NodeGroup> ngs = new ELinkedList<NodeGroup>();
-            //do NOT assume global search
+            //assume global search
 
-            /*String options = "";
-            String pattern = findPattern;
-            if (findPattern.Contains("|"))
+            String options = "";
+            //String pattern = findPattern;
+            if (findPattern.contains("|"))
             {
-                String[] allIn = findPattern.Split('|');
-                pattern = allIn[0];
+                String[] allIn = findPattern.split("|");
+                findPattern = allIn[0];
                 options = allIn[1];
-                if (!options.Contains("g"))
+                if (!options.contains("g"))
                     options += "g";
             }
             else
-                findPattern += "|g";*/  
+                findPattern += "|g";  
 
             //NodeGroup[] ngs = findAll(findPattern);
             
             //ngs = sortNodes(ngs);
             
-            ELinkedList<XTreeNode> findList = tokenizeFind(findPattern, false);
+            ELinkedList<XTreeNode> findList = tokenizeFind(findPattern, false, paramList);
             Vector<XTreeNode> replaceList = tokenizeReplace(replacePattern);
 
             //while (true)
@@ -1365,6 +1372,7 @@ import java.lang.reflect.*;
                 branch = g.get(groupNo)[0];
                 //lst.remove(0); do NOT do this
                 tokenNo++;
+                //lst.remove(0);
             }
 
             //now remove all the nodes after the branch
@@ -1379,7 +1387,7 @@ import java.lang.reflect.*;
                     afterBranch = true;
             }
 
-            if (lst.size() == 0)  //replace me with nothing - just cut the branch and be done with it
+            if (lst.size() == tokenNo)  //replace me with nothing - just cut the branch and be done with it
             {
                 branch.getParentNode().removeChild(branch);
                 return null;
@@ -2883,10 +2891,28 @@ import java.lang.reflect.*;
             }
             if (toMatch.equals("*") && !useRegex)
                 return true;
-            if (paramStrings != null)
+            
+            if (paramStrings != null)  //because some interpolation is done in the walk we must expand paramStrings here for now
             {
-                int grabIndex = Integer.parseInt(toMatch);
-                toMatch = paramStrings[grabIndex];
+            	int searchIndex = 0;
+            	int tokenIndex = toMatch.indexOf('#', searchIndex);
+            	int endOfString = toMatch.length();
+            	while(tokenIndex != -1)
+            	{
+            		//int grabIndex = 0;
+            		int indexEnd = tokenIndex + 1;
+            		
+            		while(indexEnd < endOfString && Character.isDigit(toMatch.charAt(indexEnd)))
+            			indexEnd++;
+            		
+            		//indexEnd--;
+            		int grabIndex = Integer.parseInt(toMatch.substring(tokenIndex + 1, indexEnd));
+            		String bef = toMatch.substring(0, tokenIndex);
+            		String aft = toMatch.substring(indexEnd);
+            		toMatch = bef + paramStrings[grabIndex] + aft;
+            		searchIndex = tokenIndex + paramStrings[grabIndex].length();
+            		tokenIndex = toMatch.indexOf('#', searchIndex);
+            	}
             }
             
             if (useRegex)
@@ -2897,6 +2923,8 @@ import java.lang.reflect.*;
                 col.setMatcher(cx);
                 return (cx.find(0));
             }
+            else if(ignoreCase)
+            	return input.equalsIgnoreCase(toMatch);
             else
                 return input.equals(toMatch);
            
@@ -3425,6 +3453,8 @@ public class XPatternTest
 		//text and CDATA find
 		ng1 = xp1.findAll("desc\\\"");
 		expect(1, ng1);
+		
+		
 		ng1 = xp1.findAll("class\\sample\\CDATA");
 		expect(1, ng1);
 		//regex text find
@@ -3433,6 +3463,10 @@ public class XPatternTest
 		//negated find
 		//ng1 = xp1.findAll("method\\!param");
 		//expect(1, ng1);
+		xp1.findFirst("method");
+		if((xp1.options & xp1.GLOBAL_SEARCH) > 0)
+			System.err.println("global search improperly set");
+		
 		ng1 = xp1.findAll("class\\!method");
 		expect(3, ng1);
 		//perhaps find attribute
@@ -3465,6 +3499,11 @@ public class XPatternTest
 		ng1 = xp1.findAll("@name");
 		expect(5, ng1);
 		
+		//parameterization
+		String[] param01 = {"Patt"};
+		ng1 = xp1.findAll("param@name=replace#0ern", param01);
+		expect(1, ng1);
+				
 		//REPLACE
 		//directional replace
 		ng1 = xp1.replaceAll("vars", "fields");
@@ -3478,7 +3517,6 @@ public class XPatternTest
 		ng1 = xp1.replaceAll("field\\(desc)\\\"/(variable)", "^1desc\\\"$`2>ref\\\"$2/>\"$'2");
 		System.out.println(XmlUtils.outerXml(d.getDocumentElement()));
 		//text and CDATA replace
-		
 		//$n - node only
 		
 		//%n - children only
@@ -3501,6 +3539,28 @@ public class XPatternTest
 		xp1.replaceAll("class\\(desc)\\\"(*)", "^1desc@#0=#1$2", replacers);  //look at how the nodeGroup is made for this one
 		System.out.println(XmlUtils.outerXml(d.getDocumentElement()));
 		
+		//% copies attributes?  no
+		//xp1.replace("(class)(@**)", "^1type@$2%1");  //you need to select elements and attributes separately when trying to preserve them
+		//System.out.println(XmlUtils.outerXml(d.getDocumentElement()));
+		
+		//& copies attributes?  yes
+		//xp1.replace("(type)", "&1");
+		//System.out.println(XmlUtils.outerXml(d.getDocumentElement()));
+		
+		//$ copies attributes? yes
+		//xp1.replace("(param)", "$1");
+		//System.out.println(XmlUtils.outerXml(d.getDocumentElement()));
+		
+		xp1.replaceAll("class\\(!method)", "^1");
+		System.out.println(XmlUtils.outerXml(d.getDocumentElement()));
+		
+		
+		
+		xp1.replaceAll("method@name=(*)", "tr\\\"$1");
+		System.out.println(XmlUtils.outerXml(d.getDocumentElement()));
+		
+		xp1.replace("(class)", "html\\body\\th\\\"Name/>%1");
+		System.out.println(XmlUtils.outerXml(d.getDocumentElement()));
 		
 		//XPattern2 tests
 		Document d2 = XmlUtils.loadXML("src\\XPattern2.xml");
